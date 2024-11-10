@@ -44,6 +44,7 @@
 | **UPGRADE_CART**           |                     Auto-upgrade cart (default - True)                      |
 | **MAX_CART_LEVEL**         |                  Max cart level for upgrade (default - 3)                   |
 | **EXPEDITIONS**            |                   Auto-send expeditions (default - False)                   |
+| **CUSTOM_EXPEDITION_COST** |                Custom price for expedition (default - 10000)                |
 | **MIN_EXP_DURATION**       |                 Minimum expedition duration (default - 360)                 |
 | **NIGHT_SLEEP**            |                      Night sleep mode (default - True)                      |
 | **NIGHT_SLEEP_START_TIME** |        Start time for night sleep (must be 0..23; default - [1, 2])         |

@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     UPGRADE_CART: bool = True
     MAX_CART_LEVEL: int = 3
     EXPEDITIONS: bool = False
+    CUSTOM_EXPEDITION_COST: int = 10000
     MIN_EXP_DURATION: int = 360
     AUTO_TASK: bool = True
     JOIN_TG_CHANNELS: bool = False

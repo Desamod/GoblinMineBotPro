@@ -450,16 +450,17 @@ class Tapper:
             running_expeditions = [ex['name'] for ex in user_expeditions if ex['status'] == 'in_process']
             for expedition in expeditions:
                 if expedition['name'] not in running_expeditions and expedition['duration'] >= settings.MIN_EXP_DURATION:
-                    if expedition['min'] > self.balance:
+                    expedition_cost = max(settings.CUSTOM_EXPEDITION_COST, expedition['min'])
+                    if expedition_cost > self.balance:
                         continue
                     result = await self.get_expedition(http_client, expedition['id'])
                     if result:
                         await asyncio.sleep(delay=randint(1, 5))
-                        result = await self.buy_expedition(http_client, expedition['id'], expedition['min'])
+                        result = await self.buy_expedition(http_client, expedition['id'], expedition_cost)
                         if result:
-                            self.balance -= expedition['min']
+                            self.balance -= expedition_cost
                             logger.success(f'{self.session_name} | Successfully sent expedition: {expedition["name"]} '
-                                           f'| Spent: <fg #08a384>{expedition["min"]}</fg #08a384>')
+                                           f'| Spent: <fg #08a384>{expedition_cost}</fg #08a384>')
 
                     await asyncio.sleep(delay=randint(3, 15))
 
@@ -629,7 +630,7 @@ class Tapper:
                                             f'Miners: <fg #b8072e>{user_miners}/{max_miners}</fg #b8072e> | '
                                             f'Cart volume: <fg #8607b8>{cart_volume}</fg #8607b8>')
 
-                                if settings.UPGRADE_MINE and user_mine['extracted_percent'] > 90:
+                                if settings.UPGRADE_MINE and user_mine['extracted_percent'] > 95:
                                     await self.try_upgrade_mine(http_client=scraper, mine_id=mine_data['id'])
 
                                 self.can_upgrade = True
