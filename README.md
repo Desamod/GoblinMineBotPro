@@ -17,6 +17,7 @@
 | Registration in bot                               |     ✅     |
 | Auto-tasks support                                |     ✅     |
 | Daily rewards                                     |     ✅     |
+| Claim referral rewards                            |     ✅     |
 | Auto-mining                                       |     ✅     |
 | Expeditions support                               |     ✅     |
 | Auto-purchase mines                               |     ✅     |

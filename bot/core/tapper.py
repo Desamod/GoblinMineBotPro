@@ -467,6 +467,37 @@ class Tapper:
             logger.error(f"{self.session_name} | Unknown error while trying to send expeditions | Error: {e}")
             await asyncio.sleep(delay=3)
 
+    async def can_collect_ref_reward(self, http_client: cloudscraper.CloudScraper, world_id: int):
+        try:
+            response = self.make_request(http_client, OperationName.ReferralInfo,
+                                         Query.ReferralInfo, {"worldId": world_id})
+            response.raise_for_status()
+            response_json = response.json()
+            ref_reward = response_json['data']['referralInfo'].get('referralBalance', 0)
+            return ref_reward > 0
+
+        except Exception as e:
+            logger.error(f"{self.session_name} | Unknown error while getting referral info | Error: {e}")
+            await asyncio.sleep(delay=3)
+            return False
+
+    async def get_ref_reward(self, http_client: cloudscraper.CloudScraper, world_id: int):
+        try:
+            response = self.make_request(http_client, OperationName.Transfer,
+                                         Query.Transfer, {"worldId": world_id})
+            response.raise_for_status()
+            response_json = response.json()
+
+            self.make_request(http_client, OperationName.ReferralInfo,
+                              Query.ReferralInfo, {"worldId": world_id})
+
+            return response_json['data']['transfer'].get('amount')
+
+        except Exception as e:
+            logger.error(f"{self.session_name} | Unknown error while getting referral reward | Error: {e}")
+            await asyncio.sleep(delay=3)
+            return None
+
     def is_night(self) -> bool:
         start_time = randint(settings.NIGHT_SLEEP_START_TIME[0], settings.NIGHT_SLEEP_START_TIME[1])
         end_time = randint(settings.NIGHT_SLEEP_END_TIME[0], settings.NIGHT_SLEEP_END_TIME[1])
@@ -563,6 +594,15 @@ class Tapper:
                                         logger.success(f'{self.session_name} | Successfully claimed mining reward from '
                                                        f'<y>{mine_data["name"]}</y> | Reward: <e>{reward}</e>')
                                     await asyncio.sleep(delay=randint(3, 10))
+
+                    can_collect = await self.can_collect_ref_reward(http_client=scraper, world_id=current_world['id'])
+                    if can_collect:
+                        ref_reward = await self.get_ref_reward(http_client=scraper, world_id=current_world['id'])
+                        if ref_reward and ref_reward > 0:
+                            self.balance += ref_reward
+                            logger.success(f'{self.session_name} | Successfully claimed referral reward '
+                                           f'| Reward: <e>{ref_reward}</e>')
+                        await asyncio.sleep(delay=randint(3, 10))
 
                     if settings.AUTO_BUY_MINE:
                         await asyncio.sleep(delay=randint(3, 10))

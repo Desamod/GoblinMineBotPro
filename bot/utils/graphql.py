@@ -24,6 +24,8 @@ class Query(str, Enum):
     DailyBonusAndTasks = "query dailyBonusAndTasks($worldId: Int!) {\n  dailyBonus {\n    ...DAILY_BONUS_FRAGMENT\n    __typename\n  }\n  tasks(worldId: $worldId) {\n    ...TASK_FRAGMENT\n    __typename\n  }\n}\n\nfragment DAILY_BONUS_FRAGMENT on DailyBonus {\n  amount\n  available\n  day\n  is_done\n  currency {\n    ...CURRENCY_FRAGMENT\n    __typename\n  }\n  __typename\n}\n\nfragment CURRENCY_FRAGMENT on Currency {\n  id\n  amount\n  coefficient\n  icon\n  name\n  __typename\n}\n\nfragment TASK_FRAGMENT on Task {\n  amount\n  id\n  image\n  status\n  title\n  url\n  currency {\n    ...CURRENCY_FRAGMENT\n    __typename\n  }\n  __typename\n}"
     GiveBonus = "mutation giveBonus {\n  giveBonus {\n    message\n    status\n    volume\n    __typename\n  }\n}"
     CheckTask = "mutation checkTask($taskId: Int!) {\n  checkTask(taskId: $taskId) {\n    message\n    status\n    __typename\n  }\n}"
+    ReferralInfo = "query referralInfo($worldId: Int!) {\n  referralInfo(worldId: $worldId) {\n    link\n    share_url\n    earned\n    invited\n    rating\n    referralBalance\n    for_each_friend\n    referralSetting {\n      description\n      percent\n      __typename\n    }\n    currency {\n      ...CURRENCY_FRAGMENT\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment CURRENCY_FRAGMENT on Currency {\n  id\n  amount\n  coefficient\n  icon\n  name\n  __typename\n}"
+    Transfer = "mutation transfer($worldId: Int!) {\n  transfer(worldId: $worldId) {\n    amount\n    message\n    status\n    __typename\n  }\n}"
 
 
 class OperationName(str, Enum):
@@ -49,3 +51,5 @@ class OperationName(str, Enum):
     DailyBonusAndTasks = "dailyBonusAndTasks"
     GiveBonus = "giveBonus"
     CheckTask = "checkTask"
+    ReferralInfo = "referralInfo"
+    Transfer = "transfer"
