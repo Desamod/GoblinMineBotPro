@@ -1,6 +1,6 @@
 [![Static Badge](https://img.shields.io/badge/Telegram-Bot%20Link-Link?style=for-the-badge&logo=Telegram&logoColor=white&logoSize=auto&color=blue)](https://t.me/GoblinMine_bot/start?startapp=7253650410)
 
-# PAWS BOT
+# GoblinMine BOT
 ## Рекомендация перед использованием
 
 # 🔥🔥 Используйте PYTHON 3.10 🔥🔥
