@@ -10,7 +10,6 @@ from bot.core.tapper import run_tapper
 from bot.core.registrator import register_sessions
 from bot.utils.accounts import Accounts
 from bot.core.TgManager.tg_manager import SessionManager
-from bot.core.WalletManager.WalletManager import generate_wallets, get_not_connected_wallets
 
 
 start_text = """
@@ -21,7 +20,8 @@ start_text = """
 ██║░░╚██╗██║░░██║██╔══██╗██║░░░░░██║██║╚████║██║╚██╔╝██║██║██║╚████║██╔══╝░░██╔══██╗██║░░██║░░░██║░░░
 ╚██████╔╝╚█████╔╝██████╦╝███████╗██║██║░╚███║██║░╚═╝░██║██║██║░╚███║███████╗██████╦╝╚█████╔╝░░░██║░░░
 ░╚═════╝░░╚════╝░╚═════╝░╚══════╝╚═╝╚═╝░░╚══╝╚═╝░░░░░╚═╝╚═╝╚═╝░░╚══╝╚══════╝╚═════╝░░╚════╝░░░░╚═╝░░░
-                                                                                           by Desamod                                                              
+Pro Version                                                                                by Desamod                                                              
+
 Select an action:
 
     1. Run bot

@@ -51,10 +51,12 @@ def extract_queries_and_fragments(content):
     result = []
     current = ''
     depth = 0
-
+    extra_chars = 0
     i = 0
     while i < len(content):
         char = content[i]
+        if depth == 0 and char != '{' and char != '}':
+            extra_chars += 1
         if char == '{' and depth == 0:
             start = i
             depth += 1
@@ -62,8 +64,9 @@ def extract_queries_and_fragments(content):
             continue
 
         elif char == '}' and depth == 1:
-            result.append(content[start:i + 1])
+            result.append(content[start - extra_chars:i + 1])
             depth = 0
+            extra_chars = 0
             i += 1
             continue
 
