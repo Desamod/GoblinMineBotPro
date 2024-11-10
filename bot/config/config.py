@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     MIN_EXP_DURATION: int = 360
     AUTO_TASK: bool = True
     JOIN_TG_CHANNELS: bool = False
-    NIGHT_SLEEP: bool = False
+    NIGHT_SLEEP: bool = True
     NIGHT_SLEEP_START_TIME: list[int] = [1, 2]
     NIGHT_SLEEP_END_TIME: list[int] = [7, 9]
     REF_ID: str = '7253650410'
