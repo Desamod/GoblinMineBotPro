@@ -3,6 +3,7 @@ import io
 import json
 import sys
 from datetime import datetime
+from json import JSONDecodeError
 from time import time
 from typing import Any
 import zstandard as zstd
@@ -114,6 +115,13 @@ class Tapper:
             response.raise_for_status()
             json_data = json.loads(response.text)
             return json_data.get('data', [])
+
+        except JSONDecodeError:
+            decompressor = zstd.ZstdDecompressor()
+            with decompressor.stream_reader(io.BytesIO(response.content)) as reader:
+                decompressed_data = reader.read()
+                json_data = json.loads(decompressed_data)
+                return json_data.get('data', [])
         except Exception as error:
             logger.error(f"{self.session_name} | Unknown error when getting daily reward: {error}")
             await asyncio.sleep(delay=3)
