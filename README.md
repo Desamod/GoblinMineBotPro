@@ -35,6 +35,7 @@
 | **SLEEP_TIME**             |            Sleep time between cycles (by default - [3600, 7200])            |
 | **START_DELAY**            |           Delay between sessions at start (by default - [5, 25])            |
 | **AUTO_TASK**              |                         Auto tasks (default - True)                         |
+| **AUTO_SPIN**              |                         Auto spins (default - True)                         |
 | **AUTO_MINING**            |               Collecting rewards for mining (default - True)                |
 | **AUTO_BUY_MINE**          |                    Auto purchase mines (default - True)                     |
 | **AUTO_UPGRADE**           |                    Enable auto-upgrades (default - True)                    |

@@ -12,7 +12,7 @@ class Query(str, Enum):
     Inventory = "query inventory($mineId: Int!) {\n  inventory(mineId: $mineId) {\n    disabled\n    id\n    image\n    income_hour\n    level\n    name\n    price\n    inventory_income_hour\n    currency {\n      ...CURRENCY_FRAGMENT\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment CURRENCY_FRAGMENT on Currency {\n  id\n  amount\n  coefficient\n  icon\n  name\n  __typename\n}"
     Carts = "query carts($mineId: Int!, $userMineId: Int!) {\n  carts(mineId: $mineId, userMineId: $userMineId) {\n    auto\n    available\n    id\n    image\n    level\n    name\n    price\n    volume\n    currency {\n      ...CURRENCY_FRAGMENT\n      __typename\n    }\n    miningCurrency {\n      ...CURRENCY_FRAGMENT\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment CURRENCY_FRAGMENT on Currency {\n  id\n  amount\n  coefficient\n  icon\n  name\n  __typename\n}"
     SpinHistoryAndSpins = "query spinHistoryAndSpins($first: Int!, $page: Int!) {\n  spinHistory(first: $first, page: $page) {\n    ...SPIN_HISTORY_FRAGMENT\n    __typename\n  }\n  spins {\n    ...SPINS_FRAGMENT\n    __typename\n  }\n}\n\nfragment SPIN_HISTORY_FRAGMENT on SpinsHistoryPaginator {\n  data {\n    amount\n    created_at\n    currency {\n      ...CURRENCY_FRAGMENT\n      __typename\n    }\n    __typename\n  }\n  paginatorInfo {\n    currentPage\n    lastPage\n    perPage\n    total\n    __typename\n  }\n  __typename\n}\n\nfragment CURRENCY_FRAGMENT on Currency {\n  id\n  amount\n  coefficient\n  icon\n  name\n  __typename\n}\n\nfragment SPINS_FRAGMENT on SpinsGame {\n  available\n  spins {\n    amount\n    id\n    title\n    currency {\n      ...CURRENCY_FRAGMENT\n      __typename\n    }\n    __typename\n  }\n  __typename\n}"
-    RotateSpin = "mutation rotateSpin {\n  rotateSpin {\n    message\n    status\n    sector_won\n    __typename\n  }\n}"
+    RotateSpin = "mutation rotateSpin($code: String!) {\n  rotateSpin(code: $code) {\n    message\n    status\n    sector_won\n    __typename\n  }\n}"
     BuyMine = "mutation buyMine($input: BuyMineInput!) {\n  buyMine(input: $input) {\n    message\n    status\n    __typename\n  }\n}"
     BuyMiner = "mutation buyMiner($input: BuyMinerInput!) {\n  buyMiner(input: $input) {\n    message\n    status\n    __typename\n  }\n}"
     BuyInventory = "mutation buyInventory($id: Int!) {\n  buyInventory(id: $id) {\n    message\n    volume\n    status\n    __typename\n  }\n}"
@@ -26,6 +26,7 @@ class Query(str, Enum):
     CheckTask = "mutation checkTask($taskId: Int!) {\n  checkTask(taskId: $taskId) {\n    message\n    status\n    __typename\n  }\n}"
     ReferralInfo = "query referralInfo($worldId: Int!) {\n  referralInfo(worldId: $worldId) {\n    link\n    share_url\n    earned\n    invited\n    rating\n    referralBalance\n    for_each_friend\n    referralSetting {\n      description\n      percent\n      __typename\n    }\n    currency {\n      ...CURRENCY_FRAGMENT\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment CURRENCY_FRAGMENT on Currency {\n  id\n  amount\n  coefficient\n  icon\n  name\n  __typename\n}"
     Transfer = "mutation transfer($worldId: Int!) {\n  transfer(worldId: $worldId) {\n    amount\n    message\n    status\n    __typename\n  }\n}"
+    CheckCode = "mutation checkCode($code: String!) {\n  checkCode(code: $code) {\n    message\n    status\n    __typename\n  }\n}"
 
 
 class OperationName(str, Enum):
@@ -53,3 +54,4 @@ class OperationName(str, Enum):
     CheckTask = "checkTask"
     ReferralInfo = "referralInfo"
     Transfer = "transfer"
+    CheckCode = "checkCode"

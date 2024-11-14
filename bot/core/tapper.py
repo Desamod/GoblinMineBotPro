@@ -6,6 +6,7 @@ from datetime import datetime
 from json import JSONDecodeError
 from time import time
 from typing import Any
+import requests
 import zstandard as zstd
 import cloudscraper
 from aiocfscrape import CloudflareScraper
@@ -207,6 +208,64 @@ class Tapper:
             logger.error(f"{self.session_name} | Unknown error while getting mines data | Error: {e}")
             await asyncio.sleep(delay=3)
 
+    async def get_spin_code(self):
+        response = requests.get(
+            "https://raw.githubusercontent.com/Desamod/GoblinMineBot/refs/heads/master/bot/config/codes.json")
+        if response.status_code == 200:
+            response_json = response.json()
+            curr_time = time()
+            for code_data in response_json:
+                if curr_time < code_data['expires_at']:
+                    return code_data['code']
+        else:
+            return None
+
+    async def get_spin_data(self, http_client: cloudscraper.CloudScraper):
+        try:
+            response = self.make_request(http_client, OperationName.SpinHistoryAndSpins,
+                                         Query.SpinHistoryAndSpins, {"first": 15, "page": 1})
+            response.raise_for_status()
+            response_json = response.json()
+            return response_json['data']
+
+        except Exception as e:
+            logger.error(f"{self.session_name} | Unknown error while getting spin data | Error: {e}")
+            await asyncio.sleep(delay=3)
+
+    async def send_spin_code(self, http_client: cloudscraper.CloudScraper, spin_code=str):
+        try:
+            response = self.make_request(http_client, OperationName.CheckCode,
+                                         Query.CheckCode, {"code": spin_code})
+            response.raise_for_status()
+            response_json = response.json()
+            code_data = response_json['data']['checkCode']
+            if code_data['status'] == 'ok':
+                return True
+            else:
+                logger.warning(f"{self.session_name} | Spin code rejected, reason: {code_data.get('message')} ")
+            return False
+
+        except Exception as e:
+            logger.error(f"{self.session_name} | Unknown error while sending spin code | Error: {e}")
+            await asyncio.sleep(delay=3)
+
+    async def rotate_spin(self, http_client: cloudscraper.CloudScraper, spin_code=str):
+        try:
+            response = self.make_request(http_client, OperationName.RotateSpin,
+                                         Query.RotateSpin, {"code": spin_code})
+            response.raise_for_status()
+            response_json = response.json()
+            spin_response = response_json['data']['rotateSpin']
+            if spin_response['status'] == 'ok':
+                return True
+            else:
+                logger.warning(f"{self.session_name} | Failed spin rotation, reason: {spin_response.get('message')} ")
+            return False
+
+        except Exception as e:
+            logger.error(f"{self.session_name} | Unknown error while rotating spin | Error: {e}")
+            await asyncio.sleep(delay=3)
+
     async def claim_mining_reward(self, http_client: cloudscraper.CloudScraper, world_id: int, mine_id: int):
         try:
             response = self.make_request(http_client, OperationName.PickUp,
@@ -363,7 +422,7 @@ class Tapper:
             response_json = response.json()
             inventory = response_json['data']['inventory']
             available_items = [item for item in inventory if
-                               not item['disabled'] or item.get('price', None) is not None]
+                               not item['disabled'] and item.get('price', None) is not None]
             sorted_items = sorted(available_items, key=lambda x: x['income_hour'] / x['price'], reverse=True)
             if len(self.inventory_to_buy) > 0:
                 sorted_items = sorted(sorted_items, key=lambda x: x['name'] not in self.inventory_to_buy)
@@ -423,7 +482,7 @@ class Tapper:
             response.raise_for_status()
             response_json = response.json()
             mine_upgrades = response_json['data']['upgradeMine']
-            active_upgrades = [u for u in mine_upgrades if not u['disabled'] or u.get('price', None) is not None]
+            active_upgrades = [u for u in mine_upgrades if not u['disabled'] and u.get('price', None) is not None]
             sorted_items = sorted(active_upgrades, key=lambda x: x['deposit_day'] / x['price'], reverse=True)
             for item in sorted_items:
                 if item['price'] > self.balance:
@@ -661,6 +720,33 @@ class Tapper:
                         await self.processing_tasks(http_client=scraper, world_id=current_world['id'])
                         logger.info(f"{self.session_name} | All available tasks completed")
 
+                    if settings.AUTO_SPIN:
+                        logger.info(f"{self.session_name} | Checking available spin..")
+                        await asyncio.sleep(delay=randint(5, 10))
+                        spin_data = await self.get_spin_data(http_client=scraper)
+                        if spin_data and spin_data['spins'].get('available', False):
+                            spin_code = await self.get_spin_code()
+                            if spin_code:
+                                await asyncio.sleep(delay=randint(5, 10))
+                                result = await self.send_spin_code(http_client=scraper, spin_code=spin_code)
+                                if result:
+                                    await asyncio.sleep(delay=randint(1, 5))
+                                    is_success = await self.rotate_spin(http_client=scraper, spin_code=spin_code)
+                                    if is_success:
+                                        refresh_data = await self.get_spin_data(http_client=scraper)
+                                        old_spins = spin_data['spinHistory']['data']
+                                        new_spins = refresh_data['spinHistory']['data']
+                                        if len(old_spins) < len(new_spins):
+                                            reward = new_spins[-1]
+                                            amount = reward['amount']
+                                            currency = reward['currency']['name']
+                                            logger.success(f'{self.session_name} | Successful spin '
+                                                           f'| Reward: <e>+{amount}</e> '
+                                                           f'<fg #fc9d03>{currency}</fg #fc9d03>')
+                            else:
+                                logger.info(f"{self.session_name} | No available code for spin")
+                        else:
+                            logger.info(f"{self.session_name} | No available spin")
                 logger.info(f"{self.session_name} | Sleep <y>{round(sleep_time / 60, 1)}</y> min")
                 await asyncio.sleep(delay=sleep_time)
 
