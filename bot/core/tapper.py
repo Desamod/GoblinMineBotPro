@@ -633,7 +633,7 @@ class Tapper:
 
                     access_token_created_time = time()
                     token_live_time = 3600
-
+                    scraper.headers['App-B'] = headers['App-B']
                     await self.send_language_code(http_client=scraper, tg_web_data=tg_web_data)
                     http_client.headers['Authorization'] = f'Bearer {auth_token}'
                     scraper.headers = http_client.headers.copy()

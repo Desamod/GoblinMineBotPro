@@ -10,6 +10,10 @@ from bot.utils.graphql import Query
 base_api_url = 'https://api.goblinmine.game'
 endpoints = ['/graphql']
 
+ws_api_url = 'ws.goblinmine.game'
+ws_key = 'h2co7fdfjnsiwzdrapmq'
+app_hash = '7246500f-89c5-4178-bdc3-d265b960b294'
+
 
 def find_js_files(base_url):
     try:
@@ -141,6 +145,25 @@ def is_valid_endpoints():
             if endpoint_mask not in content:
                 logger.warning(f"Endpoint <lc>{endpoint}</lc> not found.")
                 return False
+
+        if ws_api_url not in content:
+            logger.warning(f"WS <lc>{ws_api_url}</lc> not found.")
+            return False
+
+        if ws_key not in content:
+            logger.warning(f"WS key <lc>{ws_api_url}</lc> not found.")
+            return False
+
+        if app_hash not in content:
+            matches = re.findall(r'"App-B":"(.*?)"', content)
+            if len(matches) == 0:
+                logger.warning(f"APP hash <lc>{app_hash}</lc> not found.")
+                return False
+            else:
+                logger.warning(f"APP hash <lc>{app_hash}</lc> has changed.")
+                headers['App-B'] = matches[0]
+        else:
+            headers['App-B'] = app_hash
         return True
     else:
         logger.warning("Could not find any main.js format. Dumping page content for inspection:")
