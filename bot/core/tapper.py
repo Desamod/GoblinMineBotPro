@@ -1,11 +1,15 @@
 import asyncio
+import base64
 import io
 import json
+import os
 import sys
 from datetime import datetime
 from json import JSONDecodeError
 from time import time
 from typing import Any
+
+import aiohttp
 import requests
 import zstandard as zstd
 import cloudscraper
@@ -15,14 +19,21 @@ from bot.config import settings
 
 from bot.utils import logger
 from bot.exceptions import InvalidSession
-from .headers import headers
+from .agents import get_sec_ch_ua
+from .headers import headers, headers_socket
 
 from random import randint, random
 from urllib.parse import quote
 
-from ..utils.api_checker import is_valid_endpoints
+from ..utils.api_checker import is_valid_endpoints, ws_api_url, ws_key
 from ..utils.graphql import Query, OperationName
 from ..utils.tg_manager.TGSession import TGSession
+
+
+def generate_sec_websocket_key():
+    random_bytes = os.urandom(16)
+    sec_websocket_key = base64.b64encode(random_bytes).decode('utf-8')
+    return sec_websocket_key
 
 
 class Tapper:
@@ -32,6 +43,7 @@ class Tapper:
         self.balance = 0
         self.inventory_to_buy = []
         self.can_upgrade = False
+        self.proxy = None
 
     def make_request(self, http_client: cloudscraper.CloudScraper, operation_name: str, query: str, variables: Any):
         payload = \
@@ -516,7 +528,8 @@ class Tapper:
             user_expeditions = response_json['data']['userExpeditions']
             running_expeditions = [ex['name'] for ex in user_expeditions if ex['status'] == 'in_process']
             for expedition in expeditions:
-                if expedition['name'] not in running_expeditions and expedition['duration'] >= settings.MIN_EXP_DURATION:
+                if expedition['name'] not in running_expeditions and expedition[
+                    'duration'] >= settings.MIN_EXP_DURATION:
                     expedition_cost = max(settings.CUSTOM_EXPEDITION_COST, expedition['min'])
                     if expedition_cost > self.balance:
                         continue
@@ -582,10 +595,210 @@ class Tapper:
             result = current_hour >= start_time or current_hour < end_time
         return result
 
+    async def ws_message_handler(self, socket: aiohttp.ClientWebSocketResponse, payload: dict | None):
+        try:
+            if payload:
+                await socket.send_json(payload)
+            msg = await asyncio.wait_for(socket.receive(), timeout=15.0)
+            if msg.type == aiohttp.WSMsgType.BINARY:
+                logger.warning(f"WS.MSG: Binary data received: {msg.data}")
+            elif msg.type == aiohttp.WSMsgType.TEXT:
+                #logger.info(f"WS.MSG: Text data received: {msg.data}")
+                pass
+            elif msg.type == aiohttp.WSMsgType.CLOSE or msg.type == aiohttp.WSMsgType.CLOSED:
+                logger.warning(f"WS.MSG: Connection closed: {msg.data}")
+            elif msg.type == aiohttp.WSMsgType.ERROR:
+                logger.warning(f"WS.MSG: Error: {msg.data}")
+            return
+
+        except Exception as e:
+            logger.warning(f"WebSocket connection error: {e}")
+            await socket.close()
+            return None
+
+    async def websocket_handler(self, scraper: cloudscraper.CloudScraper, msg_waiter: asyncio.Event,
+                                stop_event: asyncio.Event):
+        uri = f'wss://{ws_api_url}/app/{ws_key}?protocol=7&client=js&version=8.4.0-rc2&flash=false'
+        headers_socket['User-Agent'] = scraper.headers['User-Agent']
+        headers_socket['Sec-Websocket-Key'] = generate_sec_websocket_key()
+        proxy_conn = ProxyConnector().from_url(self.proxy) if self.proxy else None
+        async with aiohttp.ClientSession(headers=headers, connector=proxy_conn) as http_client:
+            try:
+                socket = await http_client.ws_connect(uri, headers=headers_socket)
+                if socket.closed:
+                    logger.warning("WebSocket session closed.")
+                    return
+
+                msg = await asyncio.wait_for(socket.receive(), timeout=10.0)
+                if msg.type == aiohttp.WSMsgType.TEXT:
+                    ws_data = json.loads(msg.data)
+                    cooldown = ws_data.get('activity_timeout', 30)
+                    payload = {
+                        'event': "pusher:subscribe",
+                        'data': {
+                            'auth': "",
+                            'channel': f'BalanceUpdated_{self.tg_session.tg_id}'
+                        }
+                    }
+                    await self.ws_message_handler(socket, payload)
+                    payload['data']['channel'] = f'UserMessage_{self.tg_session.tg_id}'
+                    await self.ws_message_handler(socket, payload)
+                    rand_delay = randint(1, 5)
+                    await asyncio.sleep(rand_delay)
+                    payload['data']['channel'] = f'EndExpedition_{self.tg_session.tg_id}'
+                    await self.ws_message_handler(socket, payload)
+                    if msg_waiter.is_set():
+                        await self.ws_message_handler(socket, None)
+                        msg_waiter.clear()
+                    ping_data = {'event': "pusher:ping", 'data': {}}
+                    last_sent_time = 0
+                    while not stop_event.is_set():
+                        if msg_waiter.is_set():
+                            await self.ws_message_handler(socket, None)
+                            msg_waiter.clear()
+                        now = time()
+                        if now - last_sent_time >= cooldown * 1000:
+                            await self.ws_message_handler(socket, ping_data)
+                            last_sent_time = now
+                        await asyncio.sleep(delay=1)
+
+            except Exception as error:
+                logger.error(f"{self.session_name} | Error during game handling: {error}")
+                stop_event.set()
+                await asyncio.sleep(delay=randint(60, 120))
+
+            finally:
+                if http_client is not None:
+                    await http_client.close()
+                if socket is not None and not socket.closed:
+                    await socket.close()
+
+    async def game_handler(self, scraper: cloudscraper.CloudScraper, msg_waiter: asyncio.Event,
+                           stop_event: asyncio.Event):
+        try:
+            worlds = await self.get_worlds(http_client=scraper)
+            current_world = [world for world in worlds if world['active']][0]
+            balance = current_world['currency']['amount']
+            self.balance = balance
+            logger.info(
+                f"{self.session_name} | Current world: <fg #fc9d03>{current_world['name']}</fg #fc9d03> "
+                f"| Balance: <e>{round(balance, 1)}</e> | Income per hour: <lc>{current_world['income_day']}</lc>")
+
+            mines_data = await self.get_mines_and_tasks(http_client=scraper, world_id=current_world['id'])
+
+            if settings.AUTO_MINING:
+                await asyncio.sleep(delay=randint(5, 15))
+                for mine_data in mines_data:
+                    if mine_data.get('userMine', None) is not None:
+                        reward = round(mine_data['userMine']['extracted_amount'], 1)
+                        if reward > 1:
+                            result = await self.claim_mining_reward(http_client=scraper,
+                                                                    world_id=current_world['id'],
+                                                                    mine_id=mine_data['userMine']['id'])
+                            if result:
+                                self.balance += reward
+                                logger.success(f'{self.session_name} | Successfully claimed mining reward from '
+                                               f'<y>{mine_data["name"]}</y> | Reward: <e>{reward}</e>')
+                                msg_waiter.set()
+                            await asyncio.sleep(delay=randint(3, 10))
+
+            can_collect = await self.can_collect_ref_reward(http_client=scraper, world_id=current_world['id'])
+            if can_collect:
+                ref_reward = await self.get_ref_reward(http_client=scraper, world_id=current_world['id'])
+                if ref_reward and ref_reward > 0:
+                    self.balance += ref_reward
+                    logger.success(f'{self.session_name} | Successfully claimed referral reward '
+                                   f'| Reward: <e>{ref_reward}</e>')
+                await asyncio.sleep(delay=randint(3, 10))
+
+            if settings.AUTO_BUY_MINE:
+                await asyncio.sleep(delay=randint(3, 10))
+                for mine_data in mines_data:
+                    if mine_data.get('userMine', None) is None and self.balance >= mine_data['price']:
+                        result = await self.buy_mine(http_client=scraper, mine_id=mine_data['id'])
+                        if result:
+                            logger.success(f'{self.session_name} | New mine purchased: <y>{mine_data["name"]}'
+                                           f'</y> | Spent: <fg #08a384>{mine_data["price"]}</fg #08a384>')
+                            self.balance -= mine_data['price']
+
+            if settings.AUTO_UPGRADE:
+                for mine_data in mines_data:
+                    user_mine = mine_data.get('userMine', None)
+                    if user_mine is not None:
+                        await asyncio.sleep(delay=randint(3, 10))
+                        max_miners = mine_data['miner_amount']
+                        user_miners = mine_data['user_miners_count']
+                        max_dep = user_mine['deposit_day_default']
+                        current_dep = round(user_mine['deposit_day'], 1)
+                        cart_volume = user_mine['volume']
+                        logger.info(f'{self.session_name} | Current mine: <y>{mine_data["name"]}</y> | '
+                                    f'Deposits per day: <g>{current_dep}/{max_dep}</g> | '
+                                    f'Miners: <fg #b8072e>{user_miners}/{max_miners}</fg #b8072e> | '
+                                    f'Cart volume: <fg #8607b8>{cart_volume}</fg #8607b8>')
+
+                        if settings.UPGRADE_MINE and user_mine['extracted_percent'] > 95:
+                            await self.try_upgrade_mine(http_client=scraper, mine_id=mine_data['id'])
+
+                        self.can_upgrade = True
+                        while self.can_upgrade:
+                            self.can_upgrade = False
+                            if settings.UPGRADE_MINERS:
+                                await self.try_upgrade_miners(http_client=scraper, mine_id=mine_data['id'])
+                            if settings.UPGRADE_INVENTORY:
+                                await self.try_upgrade_inventory(http_client=scraper, mine_id=mine_data['id'])
+                        if settings.UPGRADE_CART:
+                            await self.try_upgrade_cart(http_client=scraper, mine_id=mine_data['id'],
+                                                        user_mine_id=user_mine['id'])
+
+            if settings.EXPEDITIONS:
+                await asyncio.sleep(delay=randint(3, 10))
+                await self.try_send_expeditions(http_client=scraper, world_id=current_world['id'])
+
+            if settings.AUTO_TASK:
+                await asyncio.sleep(delay=randint(5, 10))
+                await self.processing_tasks(http_client=scraper, world_id=current_world['id'])
+                logger.info(f"{self.session_name} | All available tasks completed")
+
+            if settings.AUTO_SPIN:
+                logger.info(f"{self.session_name} | Checking available spin..")
+                await asyncio.sleep(delay=randint(5, 10))
+                spin_data = await self.get_spin_data(http_client=scraper)
+                if spin_data and spin_data['spins'].get('available', False):
+                    spin_code = await self.get_spin_code()
+                    if spin_code:
+                        await asyncio.sleep(delay=randint(5, 10))
+                        result = await self.send_spin_code(http_client=scraper, spin_code=spin_code)
+                        if result:
+                            await asyncio.sleep(delay=randint(1, 5))
+                            is_success = await self.rotate_spin(http_client=scraper, spin_code=spin_code)
+                            if is_success:
+                                refresh_data = await self.get_spin_data(http_client=scraper)
+                                old_spins = spin_data['spinHistory']['data']
+                                new_spins = refresh_data['spinHistory']['data']
+                                if len(old_spins) < len(new_spins):
+                                    reward = new_spins[-1]
+                                    amount = reward['amount']
+                                    currency = reward['currency']['name']
+                                    logger.success(f'{self.session_name} | Successful spin '
+                                                   f'| Reward: <e>+{amount}</e> '
+                                                   f'<fg #fc9d03>{currency}</fg #fc9d03>')
+                    else:
+                        logger.info(f"{self.session_name} | No available code for spin")
+                else:
+                    logger.info(f"{self.session_name} | No available spin")
+
+            stop_event.set()
+        except Exception as error:
+            logger.error(f"{self.session_name} | Error during game handling: {error}")
+            stop_event.set()
+            await asyncio.sleep(delay=randint(60, 120))
+
     async def run(self, user_agent: str, proxy: str | None) -> None:
         access_token_created_time = 0
         proxy_conn = ProxyConnector().from_url(proxy) if proxy else None
+        self.proxy = proxy
         headers["User-Agent"] = user_agent
+        headers['Sec-Ch-Ua'] = get_sec_ch_ua(user_agent)
 
         http_client = CloudflareScraper(headers=headers, connector=proxy_conn, trust_env=True,
                                         auto_decompress=False)
@@ -601,6 +814,8 @@ class Tapper:
 
         token_live_time = 3600
         scraper.headers = http_client.headers.copy()
+        stop_event = asyncio.Event()
+        msg_waiter = asyncio.Event()
         while True:
             try:
                 if settings.NIGHT_SLEEP:
@@ -625,140 +840,40 @@ class Tapper:
                     if tg_web_data is None:
                         continue
 
+                    scraper.headers['App-B'] = headers['App-B']
                     auth_token = await self.login(http_client=scraper, tg_web_data=tg_web_data)
                     if auth_token is None:
                         token_live_time = 0
-                        await asyncio.sleep(randint(100, 180))
+                        await asyncio.sleep(sleep_time)
+                        logger.warning(f'{self.session_name} | Failed to login | '
+                                       f'Next try after <y>{round(sleep_time / 60, 1)}</y> min')
                         continue
 
                     access_token_created_time = time()
                     token_live_time = 3600
-                    scraper.headers['App-B'] = headers['App-B']
                     await self.send_language_code(http_client=scraper, tg_web_data=tg_web_data)
                     http_client.headers['Authorization'] = f'Bearer {auth_token}'
                     scraper.headers = http_client.headers.copy()
 
-                    worlds = await self.get_worlds(http_client=scraper)
-                    current_world = [world for world in worlds if world['active']][0]
-                    balance = current_world['currency']['amount']
-                    self.balance = balance
-                    logger.info(
-                        f"{self.session_name} | Current world: <fg #fc9d03>{current_world['name']}</fg #fc9d03> "
-                        f"| Balance: <e>{round(balance, 1)}</e> | Income per hour: <lc>{current_world['income_day']}</lc>")
+                websocket_task = asyncio.create_task(self.websocket_handler(scraper, msg_waiter, stop_event))
+                game_task = asyncio.create_task(self.game_handler(scraper, msg_waiter, stop_event))
+                try:
+                    await asyncio.gather(websocket_task, game_task)
+                finally:
+                    websocket_task.cancel()
+                    game_task.cancel()
 
-                    mines_data = await self.get_mines_and_tasks(http_client=scraper, world_id=current_world['id'])
-
-                    if settings.AUTO_MINING:
-                        await asyncio.sleep(delay=randint(5, 15))
-                        for mine_data in mines_data:
-                            if mine_data.get('userMine', None) is not None:
-                                reward = round(mine_data['userMine']['extracted_amount'], 1)
-                                if reward > 1:
-                                    result = await self.claim_mining_reward(http_client=scraper,
-                                                                            world_id=current_world['id'],
-                                                                            mine_id=mine_data['userMine']['id'])
-                                    if result:
-                                        self.balance += reward
-                                        logger.success(f'{self.session_name} | Successfully claimed mining reward from '
-                                                       f'<y>{mine_data["name"]}</y> | Reward: <e>{reward}</e>')
-                                    await asyncio.sleep(delay=randint(3, 10))
-
-                    can_collect = await self.can_collect_ref_reward(http_client=scraper, world_id=current_world['id'])
-                    if can_collect:
-                        ref_reward = await self.get_ref_reward(http_client=scraper, world_id=current_world['id'])
-                        if ref_reward and ref_reward > 0:
-                            self.balance += ref_reward
-                            logger.success(f'{self.session_name} | Successfully claimed referral reward '
-                                           f'| Reward: <e>{ref_reward}</e>')
-                        await asyncio.sleep(delay=randint(3, 10))
-
-                    if settings.AUTO_BUY_MINE:
-                        await asyncio.sleep(delay=randint(3, 10))
-                        for mine_data in mines_data:
-                            if mine_data.get('userMine', None) is None and self.balance >= mine_data['price']:
-                                result = await self.buy_mine(http_client=scraper, mine_id=mine_data['id'])
-                                if result:
-                                    logger.success(f'{self.session_name} | New mine purchased: <y>{mine_data["name"]}'
-                                                   f'</y> | Spent: <fg #08a384>{mine_data["price"]}</fg #08a384>')
-                                    self.balance -= mine_data['price']
-
-                    if settings.AUTO_UPGRADE:
-                        for mine_data in mines_data:
-                            user_mine = mine_data.get('userMine', None)
-                            if user_mine is not None:
-                                await asyncio.sleep(delay=randint(3, 10))
-                                max_miners = mine_data['miner_amount']
-                                user_miners = mine_data['user_miners_count']
-                                max_dep = user_mine['deposit_day_default']
-                                current_dep = round(user_mine['deposit_day'], 1)
-                                cart_volume = user_mine['volume']
-                                logger.info(f'{self.session_name} | Current mine: <y>{mine_data["name"]}</y> | '
-                                            f'Deposits per day: <g>{current_dep}/{max_dep}</g> | '
-                                            f'Miners: <fg #b8072e>{user_miners}/{max_miners}</fg #b8072e> | '
-                                            f'Cart volume: <fg #8607b8>{cart_volume}</fg #8607b8>')
-
-                                if settings.UPGRADE_MINE and user_mine['extracted_percent'] > 95:
-                                    await self.try_upgrade_mine(http_client=scraper, mine_id=mine_data['id'])
-
-                                self.can_upgrade = True
-                                while self.can_upgrade:
-                                    self.can_upgrade = False
-                                    if settings.UPGRADE_MINERS:
-                                        await self.try_upgrade_miners(http_client=scraper, mine_id=mine_data['id'])
-                                    if settings.UPGRADE_INVENTORY:
-                                        await self.try_upgrade_inventory(http_client=scraper, mine_id=mine_data['id'])
-                                if settings.UPGRADE_CART:
-                                    await self.try_upgrade_cart(http_client=scraper, mine_id=mine_data['id'],
-                                                                user_mine_id=user_mine['id'])
-
-                    if settings.EXPEDITIONS:
-                        await asyncio.sleep(delay=randint(3, 10))
-                        await self.try_send_expeditions(http_client=scraper, world_id=current_world['id'])
-
-                    if settings.AUTO_TASK:
-                        await asyncio.sleep(delay=randint(5, 10))
-                        await self.processing_tasks(http_client=scraper, world_id=current_world['id'])
-                        logger.info(f"{self.session_name} | All available tasks completed")
-
-                    if settings.AUTO_SPIN:
-                        logger.info(f"{self.session_name} | Checking available spin..")
-                        await asyncio.sleep(delay=randint(5, 10))
-                        spin_data = await self.get_spin_data(http_client=scraper)
-                        if spin_data and spin_data['spins'].get('available', False):
-                            spin_code = await self.get_spin_code()
-                            if spin_code:
-                                await asyncio.sleep(delay=randint(5, 10))
-                                result = await self.send_spin_code(http_client=scraper, spin_code=spin_code)
-                                if result:
-                                    await asyncio.sleep(delay=randint(1, 5))
-                                    is_success = await self.rotate_spin(http_client=scraper, spin_code=spin_code)
-                                    if is_success:
-                                        refresh_data = await self.get_spin_data(http_client=scraper)
-                                        old_spins = spin_data['spinHistory']['data']
-                                        new_spins = refresh_data['spinHistory']['data']
-                                        if len(old_spins) < len(new_spins):
-                                            reward = new_spins[-1]
-                                            amount = reward['amount']
-                                            currency = reward['currency']['name']
-                                            logger.success(f'{self.session_name} | Successful spin '
-                                                           f'| Reward: <e>+{amount}</e> '
-                                                           f'<fg #fc9d03>{currency}</fg #fc9d03>')
-                            else:
-                                logger.info(f"{self.session_name} | No available code for spin")
-                        else:
-                            logger.info(f"{self.session_name} | No available spin")
                 logger.info(f"{self.session_name} | Sleep <y>{round(sleep_time / 60, 1)}</y> min")
                 await asyncio.sleep(delay=sleep_time)
 
             except InvalidSession as error:
                 raise error
-
             except Exception as error:
                 logger.error(f"{self.session_name} | Unknown error: {error}")
                 await asyncio.sleep(delay=randint(60, 120))
-
             except KeyboardInterrupt:
                 logger.warning("<r>Bot stopped by user...</r>")
+
             finally:
                 if scraper is not None:
                     await http_client.close()
