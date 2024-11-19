@@ -323,7 +323,7 @@ def get_telegram_custom_params(user_agent: str) -> str | None:
         return None
     telegram_version = random.choice(telegram_versions)
     performance_version = random.choice(performance_class)
-    android_version = re.search(r'Android (\d+(\.\d+)*)', user_agent).group(1)
+    android_version = re.search(r'Android (\d+(\.\d+)*)', user_agent).group(1).split('.')[0]
     tg_params = f" Telegram-Android/{telegram_version} " \
                 f"({android_manufacturer} {android_device}; Android {android_version}; " \
                 f"SDK {android_sdks[android_version]}; {performance_version})"
