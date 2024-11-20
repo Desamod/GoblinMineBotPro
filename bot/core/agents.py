@@ -250,7 +250,7 @@ android_devices = {
 telegram_versions = [
     '11.0.1', '11.1.0', '11.1.1', '11.1.2', '11.1.3',
     '11.2.0', '11.2.1', '11.2.2', '11.2.3', '11.3.0', '11.3.1',
-    '11.3.2', '11.3.3', '11.3.4', '11.4.0'
+    '11.3.2', '11.3.3', '11.3.4', '11.4.0', '11.4.2'
 ]
 
 performance_class = ['AVERAGE', 'HIGH']
@@ -317,7 +317,10 @@ def is_user_agent_valid(user_agent: str) -> bool:
 
 
 def get_telegram_custom_params(user_agent: str) -> str | None:
-    android_device = re.search(r'Android \d+.*?; (.*?)(?=\))', user_agent).group(1)
+    android_device = re.search(r'Android \d+.*?; (.*?)(?=\))', user_agent)
+    if not android_device:
+        return None
+    android_device = android_device.group(1)
     android_manufacturer = random.choice(manufacturers) if android_device == 'K' else get_manufacturer(android_device)
     if not android_manufacturer:
         return None
