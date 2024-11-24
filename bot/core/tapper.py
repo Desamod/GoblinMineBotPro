@@ -69,11 +69,13 @@ class Tapper:
         except Exception as error:
             if retry < 3:
                 logger.warning(f"{self.session_name} | Can't logging | Retry attempt: {retry}")
-                await asyncio.sleep(delay=randint(5, 10))
-                return await self.login(http_client, tg_web_data=tg_web_data, retry=retry + 1)
+                retry += 1
+                await asyncio.sleep(delay=randint(15, 25) * retry)
+                return await self.login(http_client, tg_web_data=tg_web_data, retry=retry)
 
             logger.error(f"{self.session_name} | Unknown error when logging: {error}")
             await asyncio.sleep(delay=randint(3, 7))
+            return None
 
     async def send_language_code(self, http_client: cloudscraper.CloudScraper, tg_web_data: str):
         try:
@@ -844,9 +846,9 @@ class Tapper:
                     auth_token = await self.login(http_client=scraper, tg_web_data=tg_web_data)
                     if auth_token is None:
                         token_live_time = 0
-                        await asyncio.sleep(sleep_time)
                         logger.warning(f'{self.session_name} | Failed to login | '
                                        f'Next try after <y>{round(sleep_time / 60, 1)}</y> min')
+                        await asyncio.sleep(sleep_time)
                         continue
 
                     access_token_created_time = time()
