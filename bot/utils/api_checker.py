@@ -162,6 +162,7 @@ def is_valid_endpoints():
             else:
                 logger.warning(f"APP hash <lc>{app_hash}</lc> has changed.")
                 headers['App-B'] = matches[0]
+                logger.success(f"APP hash automatically changed to <lc>{matches[0]}</lc>")
         else:
             headers['App-B'] = app_hash
         return True
