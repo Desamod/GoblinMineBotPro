@@ -603,18 +603,18 @@ class Tapper:
                 await socket.send_json(payload)
             msg = await asyncio.wait_for(socket.receive(), timeout=15.0)
             if msg.type == aiohttp.WSMsgType.BINARY:
-                logger.warning(f"WS.MSG: Binary data received: {msg.data}")
+                logger.warning(f"{self.session_name} | WS.MSG: Binary data received: {msg.data}")
             elif msg.type == aiohttp.WSMsgType.TEXT:
                 #logger.info(f"WS.MSG: Text data received: {msg.data}")
                 pass
             elif msg.type == aiohttp.WSMsgType.CLOSE or msg.type == aiohttp.WSMsgType.CLOSED:
-                logger.warning(f"WS.MSG: Connection closed: {msg.data}")
+                logger.warning(f"{self.session_name} | WS.MSG: Connection closed: {msg.data}")
             elif msg.type == aiohttp.WSMsgType.ERROR:
-                logger.warning(f"WS.MSG: Error: {msg.data}")
+                logger.warning(f"{self.session_name} | WS.MSG: Error: {msg.data}")
             return
 
         except Exception as e:
-            logger.warning(f"WebSocket connection error: {e}")
+            logger.warning(f"{self.session_name} | WebSocket connection error: {e}")
             await socket.close()
             return None
 
@@ -656,7 +656,7 @@ class Tapper:
                     last_sent_time = 0
                     while not stop_event.is_set():
                         if msg_waiter.is_set():
-                            await self.ws_message_handler(socket, None)
+                            #await self.ws_message_handler(socket, None)
                             msg_waiter.clear()
                         now = time()
                         if now - last_sent_time >= cooldown * 1000:

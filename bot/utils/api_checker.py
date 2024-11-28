@@ -12,7 +12,7 @@ endpoints = ['/graphql']
 
 ws_api_url = 'ws.goblinmine.game'
 ws_key = 'h2co7fdfjnsiwzdrapmq'
-app_hash = '191ce19b-66d9-41b3-b0f8-a4169f17284a'
+app_hash = '0fad98a8-d6ff-409b-b80d-5e672a4ad2c5'
 
 
 def find_js_files(base_url):
