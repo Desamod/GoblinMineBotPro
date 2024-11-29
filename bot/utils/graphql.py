@@ -27,6 +27,7 @@ class Query(str, Enum):
     ReferralInfo = "query referralInfo($worldId: Int!) {\n  referralInfo(worldId: $worldId) {\n    link\n    share_url\n    earned\n    invited\n    rating\n    referralBalance\n    for_each_friend\n    referralSetting {\n      description\n      percent\n      __typename\n    }\n    currency {\n      ...CURRENCY_FRAGMENT\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment CURRENCY_FRAGMENT on Currency {\n  id\n  amount\n  coefficient\n  icon\n  name\n  __typename\n}"
     Transfer = "mutation transfer($worldId: Int!) {\n  transfer(worldId: $worldId) {\n    amount\n    message\n    status\n    __typename\n  }\n}"
     CheckCode = "mutation checkCode($code: String!) {\n  checkCode(code: $code) {\n    message\n    status\n    __typename\n  }\n}"
+    WithdrawAndWithdrawHistory = "query withdrawAndWithdrawHistory($first: Int!, $page: Int!) {\n  withdraw {\n    ...WITHDRAW_FRAGMENT\n    __typename\n  }\n  withdrawHistory(first: $first, page: $page) {\n    ...WITHDRAW_HISTORY_FRAGMENT\n    __typename\n  }\n}\n\nfragment WITHDRAW_FRAGMENT on WithdrawInfo {\n  balance\n  min\n  wallet\n  __typename\n}\n\nfragment WITHDRAW_HISTORY_FRAGMENT on WithdrawHistoryPaginator {\n  data {\n    address\n    amount\n    created_at\n    status\n    currency {\n      ...CURRENCY_FRAGMENT\n      __typename\n    }\n    __typename\n  }\n  paginatorInfo {\n    currentPage\n    lastPage\n    perPage\n    total\n    __typename\n  }\n  __typename\n}\n\nfragment CURRENCY_FRAGMENT on Currency {\n  id\n  amount\n  coefficient\n  icon\n  name\n  __typename\n}"
 
 
 class OperationName(str, Enum):
@@ -55,3 +56,4 @@ class OperationName(str, Enum):
     ReferralInfo = "referralInfo"
     Transfer = "transfer"
     CheckCode = "checkCode"
+    WithdrawAndWithdrawHistory = "withdrawAndWithdrawHistory"

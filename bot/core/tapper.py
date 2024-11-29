@@ -581,6 +581,19 @@ class Tapper:
             await asyncio.sleep(delay=3)
             return None
 
+    async def get_withdraw_data(self, http_client: cloudscraper.CloudScraper):
+        try:
+            response = self.make_request(http_client, OperationName.WithdrawAndWithdrawHistory,
+                                         Query.WithdrawAndWithdrawHistory, {'first': 15, 'page': 1})
+            response.raise_for_status()
+            response_json = response.json()
+            return response_json['data']['withdraw']
+
+        except Exception as e:
+            logger.error(f"{self.session_name} | Unknown error while getting withdraw data | Error: {e}")
+            await asyncio.sleep(delay=3)
+            return None
+
     def is_night(self) -> bool:
         start_time = randint(settings.NIGHT_SLEEP_START_TIME[0], settings.NIGHT_SLEEP_START_TIME[1])
         end_time = randint(settings.NIGHT_SLEEP_END_TIME[0], settings.NIGHT_SLEEP_END_TIME[1])
@@ -679,14 +692,20 @@ class Tapper:
                            stop_event: asyncio.Event):
         try:
             worlds = await self.get_worlds(http_client=scraper)
+            for world in worlds:
+                balance = world['currency']['amount']
+                logger.info(
+                    f"{self.session_name} | Current world: <fg #fc9d03>{world['name']}</fg #fc9d03> "
+                    f"| Balance: <e>{round(balance, 1)}</e> | Income per hour: <lc>{world['income_day']}</lc>")
+
             current_world = [world for world in worlds if world['active']][0]
             balance = current_world['currency']['amount']
             self.balance = balance
-            logger.info(
-                f"{self.session_name} | Current world: <fg #fc9d03>{current_world['name']}</fg #fc9d03> "
-                f"| Balance: <e>{round(balance, 1)}</e> | Income per hour: <lc>{current_world['income_day']}</lc>")
-
             mines_data = await self.get_mines_and_tasks(http_client=scraper, world_id=current_world['id'])
+            await asyncio.sleep(delay=randint(5, 10))
+            withdraw_data = await self.get_withdraw_data(http_client=scraper)
+            logger.info(f'{self.session_name} | Available Ton: <e>{withdraw_data["balance"]}</e>')
+                        #f'| Connected Wallet: <lc>{withdrow_data.get("wallet", None)}</lc>')
 
             if settings.AUTO_MINING:
                 await asyncio.sleep(delay=randint(5, 15))
@@ -777,8 +796,8 @@ class Tapper:
                                 refresh_data = await self.get_spin_data(http_client=scraper)
                                 old_spins = spin_data['spinHistory']['data']
                                 new_spins = refresh_data['spinHistory']['data']
-                                if len(old_spins) < len(new_spins):
-                                    reward = new_spins[-1]
+                                if new_spins[0].get('created_at') != old_spins[0].get('created_at'):
+                                    reward = new_spins[0]
                                     amount = reward['amount']
                                     currency = reward['currency']['name']
                                     logger.success(f'{self.session_name} | Successful spin '
