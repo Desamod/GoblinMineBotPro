@@ -28,6 +28,8 @@ class Query(str, Enum):
     Transfer = "mutation transfer($worldId: Int!) {\n  transfer(worldId: $worldId) {\n    amount\n    message\n    status\n    __typename\n  }\n}"
     CheckCode = "mutation checkCode($code: String!) {\n  checkCode(code: $code) {\n    message\n    status\n    __typename\n  }\n}"
     WithdrawAndWithdrawHistory = "query withdrawAndWithdrawHistory($first: Int!, $page: Int!) {\n  withdraw {\n    ...WITHDRAW_FRAGMENT\n    __typename\n  }\n  withdrawHistory(first: $first, page: $page) {\n    ...WITHDRAW_HISTORY_FRAGMENT\n    __typename\n  }\n}\n\nfragment WITHDRAW_FRAGMENT on WithdrawInfo {\n  balance\n  min\n  wallet\n  __typename\n}\n\nfragment WITHDRAW_HISTORY_FRAGMENT on WithdrawHistoryPaginator {\n  data {\n    address\n    amount\n    created_at\n    status\n    currency {\n      ...CURRENCY_FRAGMENT\n      __typename\n    }\n    __typename\n  }\n  paginatorInfo {\n    currentPage\n    lastPage\n    perPage\n    total\n    __typename\n  }\n  __typename\n}\n\nfragment CURRENCY_FRAGMENT on Currency {\n  id\n  amount\n  coefficient\n  icon\n  name\n  __typename\n}"
+    TakeBonus = "mutation takeBonus {\n  takeBonus {\n    message\n    status\n    __typename\n  }\n}"
+    NextWorld = "query nextWorld {\n  nextWorld {\n    availableBonus\n    balance\n    conversionLevels {\n      activated\n      avaiable\n      level\n      name\n      price\n      priceStar\n      boost\n      __typename\n    }\n    isNewUser\n    listBonus {\n      activated\n      amount\n      currency {\n        ...CURRENCY_FRAGMENT\n        __typename\n      }\n      name\n      __typename\n    }\n    newBalance\n    next_world\n    next_world_start\n    wallet_ton\n    __typename\n  }\n}\n\nfragment CURRENCY_FRAGMENT on Currency {\n  id\n  amount\n  coefficient\n  icon\n  name\n  __typename\n}"
 
 
 class OperationName(str, Enum):
@@ -57,3 +59,5 @@ class OperationName(str, Enum):
     Transfer = "transfer"
     CheckCode = "checkCode"
     WithdrawAndWithdrawHistory = "withdrawAndWithdrawHistory"
+    TakeBonus = "takeBonus"
+    NextWorld = "nextWorld"

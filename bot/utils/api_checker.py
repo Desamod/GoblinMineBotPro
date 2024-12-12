@@ -12,7 +12,7 @@ endpoints = ['/graphql']
 
 ws_api_url = 'ws.goblinmine.game'
 ws_key = 'h2co7fdfjnsiwzdrapmq'
-app_hash = 'a8ecd982-6368-4e58-9e26-a6880523a8b0'
+app_hash = '7fab35a2-4fd9-4cf0-8e2d-e23061054d41'
 
 
 def find_js_files(base_url):
@@ -161,8 +161,9 @@ def is_valid_endpoints():
                 return False
             else:
                 logger.warning(f"APP hash <lc>{app_hash}</lc> has changed.")
-                headers['App-B'] = matches[0]
-                logger.success(f"APP hash automatically changed to <lc>{matches[0]}</lc>")
+                return False
+                #headers['App-B'] = matches[0]
+                #logger.success(f"APP hash automatically changed to <lc>{matches[0]}</lc>")
         else:
             headers['App-B'] = app_hash
         return True

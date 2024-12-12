@@ -564,6 +564,32 @@ class Tapper:
             await asyncio.sleep(delay=3)
             return False
 
+    async def get_next_world(self, http_client: cloudscraper.CloudScraper):
+        try:
+            response = self.make_request(http_client, OperationName.NextWorld,
+                                         Query.NextWorld, {})
+            response.raise_for_status()
+            response_json = response.json()
+            return response_json['data']['nextWorld']
+
+        except Exception as e:
+            logger.error(f"{self.session_name} | Unknown error while getting world info | Error: {e}")
+            await asyncio.sleep(delay=3)
+            return None
+
+    async def take_bonus(self, http_client: cloudscraper.CloudScraper):
+        try:
+            response = self.make_request(http_client, OperationName.TakeBonus,
+                                         Query.TakeBonus, {})
+            response.raise_for_status()
+            response_json = response.json()
+            return response_json['data']['takeBonus']
+
+        except Exception as e:
+            logger.error(f"{self.session_name} | Unknown error while getting world bonus | Error: {e}")
+            await asyncio.sleep(delay=3)
+            return None
+
     async def get_ref_reward(self, http_client: cloudscraper.CloudScraper, world_id: int):
         try:
             response = self.make_request(http_client, OperationName.Transfer,
@@ -656,11 +682,11 @@ class Tapper:
                         }
                     }
                     await self.ws_message_handler(socket, payload)
-                    payload['data']['channel'] = f'UserMessage_{self.tg_session.tg_id}'
+                    payload['data']['channel'] = f'NewPayment{self.tg_session.tg_id}'
                     await self.ws_message_handler(socket, payload)
                     rand_delay = randint(1, 5)
                     await asyncio.sleep(rand_delay)
-                    payload['data']['channel'] = f'EndExpedition_{self.tg_session.tg_id}'
+                    payload['data']['channel'] = f'UserMessage{self.tg_session.tg_id}'
                     await self.ws_message_handler(socket, payload)
                     if msg_waiter.is_set():
                         await self.ws_message_handler(socket, None)
@@ -691,6 +717,31 @@ class Tapper:
     async def game_handler(self, scraper: cloudscraper.CloudScraper, msg_waiter: asyncio.Event,
                            stop_event: asyncio.Event):
         try:
+            next_world = await self.get_next_world(http_client=scraper)
+            await self.get_worlds(http_client=scraper)
+            balance = next_world['balance']
+            logger.info(f"{self.session_name} | Balance: <e>{round(balance, 1)}</e> silver")
+            next_world_start = datetime.strptime(next_world['next_world'], "%Y-%m-%d %H:%M:%S")
+            current_time = datetime.now()
+            if current_time > next_world_start:
+                logger.warning(f'{self.session_name} | Next world started! | Wait for update')
+                sys.exit()
+
+            if next_world['availableBonus']:
+                await asyncio.sleep(delay=randint(5, 15))
+                result = await self.take_bonus(http_client=scraper)
+                new_balance = next_world['newBalance']
+                if result['status'] == 'ok':
+                    logger.success(f'{self.session_name} | Taking bonus for bronze World '
+                                   f'| New Balance: <e>{round(new_balance, 1)}</e> silver')
+
+                await asyncio.sleep(delay=randint(5, 15))
+                next_world = await self.get_next_world(http_client=scraper)
+                await self.get_worlds(http_client=scraper)
+            logger.info(f'{self.session_name} | All work is done')
+            stop_event.set()
+            return
+
             worlds = await self.get_worlds(http_client=scraper)
             for world in worlds:
                 balance = world['currency']['amount']
